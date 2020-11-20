@@ -6,7 +6,8 @@ import numpy as np
 import queue
 import copy
 from itertools import combinations 
-
+from lower_bound import get_lower_bound
+from flow_scheduling import get_best_throughput
 
 def get_possible_steps(time,in_progress,complete,t_avail,schedule):
     """
@@ -92,7 +93,9 @@ def get_possible_steps(time,in_progress,complete,t_avail,schedule):
             if pair[1] == j:
                 job_list.append(pair[0])
         
-        combos = list(combinations(job_list,beta[j])) # each item in combo is a list,each item in list is a job
+        combos = list(combinations(job_list,min(beta[j],len(job_list)))) # each item in combo is a list,each item in list is a job
+        if len(combos[0]) == 0:
+            combos = []
         all_combos.append(combos)
         
     for j,combos in enumerate(all_combos): # j is task number
@@ -137,9 +140,9 @@ def get_possible_steps(time,in_progress,complete,t_avail,schedule):
 
 
 # Specify jobs [jobs,tasks,workers]
-m = 10 # num jobs
+m = 2 # num jobs
 n = 5 # num tasks per job
-p = 5 # num workers
+p = 2 # num workers
 jobs = np.random.rand(m,n,p)
 # parallelization limits
 delta = np.array([2,1,3,1,2])
@@ -151,6 +154,11 @@ for t in range(len(beta)):
     if beta[t] > 1: # task is batchable
         for w in range(p):
             jobs[:,t,w] = np.random.rand()
+
+lb1,lb2 = get_lower_bound(jobs,delta,beta)
+lb3 = get_best_throughput(jobs,delta,beta)
+
+print("Lower bound: {} {} {}".format(lb1,lb2,lb3))
 
 # define arrays for keeping track of schedule
 time = 0
@@ -171,7 +179,8 @@ while len(branch_stack) > 0: # there is at least one unexplored schedule
     
     # pop top off branch_stack to get complete, t_avail, etc
     (time,in_progress, complete,t_avail,schedule) = branch_stack.pop()
-    
+
+
     if np.min(complete) == 1:
         #finish time is highest t_avail
         finish = max(t_avail)
