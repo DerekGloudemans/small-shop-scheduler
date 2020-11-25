@@ -7,6 +7,7 @@ import queue
 import copy
 from itertools import combinations 
 from mip import *
+from lower_bound import get_lower_bound
 
 def get_best_throughput(jobs,delta,beta):
     """
@@ -83,7 +84,7 @@ def get_best_throughput(jobs,delta,beta):
         return min_throughput, all_results[key][0]
     
     
-def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50):
+def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50,FLEXIBLE = False):
     """
     Schedules tasks for the small-shop scheduling problem
      
@@ -96,10 +97,11 @@ def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50):
     """
     
     (m,n,p) = jobs.shape
-    ### first, get worker allocation to tasks that optimizes throughput
+    ### 1.) get worker allocation to tasks that optimizes throughput
     throughput, allocation = get_best_throughput(jobs,delta,beta)
     
-    ### pick a stage time that isn't restrictively small
+    ### 2.) Based on this allocation pick stage time 
+    
     # max time for an assigned worker to finish a batch
     time_per_batch = 1.0/jobs
     active = np.ceil(allocation) 
@@ -111,35 +113,201 @@ def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50):
     stage_minimum_time = stage_minimum/throughput
     
     stage_time = max(stage_minimum_time,max_batch_time)
-    # how many stages should there be? Total jobs / throughput per stage_time
-    stage_count = np.ceil(m/(throughput*stage_time))
+    stage_count = int(np.ceil(m/(throughput*stage_time)))
     
-    ### order jobs - cluster into groups with average processing time = stage time, 
-    # count number of each job class
+    ### 3.) order jobs
     classes,counts = np.unique(job_classes,return_counts = True)
     
-    # assign jobs as equally as possible per stage
+    # assign job classes as equally as possible per stage
     per_stage_min   = counts // stage_count
     per_stage_extra = counts %  stage_count
+    per_stage_extra_copy = copy.deepcopy(per_stage_extra)
+    
+    # jobs are assigned to list of lists - one per stage - each sublist element is a job index
+    classes_per_stage = np.zeros([stage_count,len(classes)]) # stage,job class count at that stage
+    jobs_per_stage = [[] for i in range(stage_count)]
+    extra_per_stage_so_far = np.zeros(stage_count)
+    for i in range(len(job_classes)):
+        cls = job_classes[i]
+        stage_idx = 0
+        ASSIGNED = False
+        while not ASSIGNED:
+            if classes_per_stage[stage_idx,cls] > per_stage_min[cls]: # stage is full
+                stage_idx += 1
+            elif classes_per_stage[stage_idx,cls] == per_stage_min[cls] and per_stage_extra[cls] > 0: # stage is one from full and needs an extra job
+                per_stage_extra[cls] -= 1
+                jobs_per_stage[stage_idx].append(i)
+                classes_per_stage[stage_idx,cls] += 1
+                ASSIGNED = True
+            elif classes_per_stage[stage_idx,cls] < per_stage_min[cls]:
+                jobs_per_stage[stage_idx].append(i)
+                classes_per_stage[stage_idx,cls] += 1
+                ASSIGNED = True
+            else:
+                stage_idx += 1
+    
+    #now, simply stack all of the stage assignments to get total job ordering for stage 0
+    job_order = [item for stage_list in jobs_per_stage for item in stage_list]
+    
+    ### 4.) Assign jobs to workers using order and allocation
+    schedule = []                     # track all tasks assigned
+    completed = np.zeros([m,n])       # track job tasks completed
+    #stage_completed = np.zeros([m,n]) # track job tasks completed this stage
+    in_progress = []                  # track in-progress job-task-worker combos
+    w_avail = np.ones([p])           # track available workers
+    w_stage_alloc = np.zeros([n,p])   # percentage of stage time worker spends on task
+    time = 0
+    stage_start = 0
+    while np.min(completed) != 1:
+        #print("Time: {}  Percent of tasks done: {}".format(time,np.sum(np.floor(completed))/(m*n)))
+        if sum(w_avail) > 0: # at least one worker is available
+            for k in range(p): # for each worker
+                if w_avail[k] == 1:
+                    task = None
+                    
+                    # available is 1 for jobs that are free and pertinent to worker
+                    available = np.ones(completed.shape)
+                    available[:,1:] = np.floor(completed[:,:-1]) # precedence constraint met if 1
+                    available = np.multiply(1-np.ceil(completed),available) 
+                    available = np.multiply(available,active[:,:,k])
+                    
+                    # only consider tasks that are below parallelization limit
+                    task_ip = np.zeros(n)
+                    for item in in_progress:
+                        j = item[2]
+                        task_ip[j] += 1
+                    task_station_avail = (task_ip < delta).astype(int)
+                    
+                    avail_tasks = np.multiply(np.sum(available,axis = 0),task_station_avail)
+                    
+                    # get set of tasks indexes which have enough available jobs for a batch
+                    ready_tasks = np.where(avail_tasks >= beta)[0]
+                    
+                    last_batch_tasks = np.where(np.min(completed,axis = 0) == 1)[0]
+                    some_ready_tasks = np.where(avail_tasks > 0)[0]
+                        
+                    # select most important task based on stage quotas
+                    if len(ready_tasks) > 0:
+                        importance = 1- (w_stage_alloc[:,k] / allocation[:,k])
+                        for j in range(n):
+                            if j not in ready_tasks:
+                                importance[j] = -np.inf
+                        task = np.argmax(importance)
+                      
+                    elif len(some_ready_tasks) > 0:  
+                        for j in range(n):
+                            last_batch = False
+                            if j == 0:
+                                last_batch = True
+                            elif j-1 in last_batch_tasks:
+                                last_batch = True
+                                
+                            if j in some_ready_tasks and last_batch:
+                                task = j
+                                break
+#                    elif FLEXIBLE:
+#                        # this time, consider non-alloted tasks
+#                        available = np.ones(completed.shape)
+#                        available[:,1:] = np.floor(completed[:,:-1])
+#                        available = np.multiply(1-np.ceil(completed),available) 
+#                        
+#                        # only consider tasks that are below parallelization limit
+#                        task_ip = np.zeros(n)
+#                        for item in in_progress:
+#                            j = item[2]
+#                            task_ip[j] += 1
+#                        task_station_avail = (task_ip < delta).astype(int)
+#                        
+#                        avail_tasks = np.multiply(np.sum(available,axis = 0),task_station_avail)
+#                        ready_tasks = np.where(avail_tasks >= beta)
+#                        if len(ready_tasks[0]) > 0:
+#                            importance = 1- (w_stage_alloc[:,k] / allocation[:,k])
+#                            for j in range(n):
+#                                if j not in ready_tasks:
+#                                    importance[j] = -10
+#                            task = np.argmax(importance)
+                        
+                        
+                    # find first beta[task] jobs in job_order with available[job,task] = 1
+                    if task is not None:
+                        task_jobs = []
+                        order_idx = 0
+                        while len(task_jobs) < beta[task] and order_idx < m:
+                            job_idx = job_order[order_idx]
+                            if available[job_idx,task] == 1:
+                                task_jobs.append(job_idx)
+                            order_idx += 1
+
+                        # now we have worker, task, and job(s) 
+                        try:
+                            completion_time = time + (1.0/jobs[task_jobs[0],task,k])
+                        except:
+                            print(task_jobs)
+                            
+                        # update completed
+                        for i in task_jobs:
+                            completed[i,task] = 0.5
+                        
+                        # update in_progress
+                        in_progress.append([completion_time,task_jobs,task,k])
+                        
+                        # update schedule
+                        step = {"worker":k,
+                            "start_time": time,
+                            "end_time": completion_time,
+                            "task": task,
+                            "jobs": task_jobs
+                            }
+                        schedule.append(step)
+                
+                        # update w_avail
+                        w_avail[k] = 0
+                        
+                        # update w_stage_alloc
+                        w_stage_alloc[task,k] += completion_time / stage_time # proportion of one stage spent on that task
+                
+        # increment time, etc
+        
+        # find first item that completes
+        next_time = 1e+10
+        for idx,item in enumerate(in_progress):
+            if item[0] < next_time:
+                next_time = item[0]
+        
+        time = next_time
+        # start new stage if necessary
+        if time - stage_start >stage_time:
+            stage_start = time
+            w_stage_alloc *= 0
+            
+        done = []
+        for idx,job in enumerate(in_progress):
+            if job[0] == next_time: # job finishes earliest
+                task = job[2]
+                job_batch = job[1]
+                # change complete
+                for j in job_batch:
+                    completed[j,task] = 1
+                    
+                worker = job[3]
+                w_avail[worker] = 1
+                
+                done.append(idx)
+        
+        # remove from in_progress
+        done.reverse()
+        for idx in done:
+            del in_progress[idx]    
     
     
-    # main loop
-        # keep track of stage time 
+    return schedule, completed, time
         
-        # if a worker is free - assign it to a job based on optimal allocation
-        
-        # as a secondary goal, assign the worker to the specific task 
-        #for which it is most optimal relative to other workers on that task
-    
-        # update completed and in_progress
-        
-        # if no jobs assignable, advance to next compeletion task time
-        
-# dummy tasks and such
-        
+
+
+
+#################################################################################################
     
 # Specify jobs [jobs,tasks,workers]
-
 m = 1000 # num jobs
 n = 5 # num tasks per job
 p = 10 # num workers
@@ -151,7 +319,7 @@ class_frequencies = np.round(rands*m).astype(int)
 all_jobs = []
 job_classes = []
 for i in range(len(class_frequencies)):
-    jobs = np.random.rand(class_frequencies[i],n,p)
+    jobs = np.random.rand(class_frequencies[i],n,p)/1.25 + 0.2
     all_jobs.append(jobs)
     for count in range(class_frequencies[i]):
         job_classes.append(i)    
@@ -168,6 +336,14 @@ for t in range(len(beta)):
         for w in range(p):
             jobs[:,t,w] = np.random.rand()
 
-lb = get_best_throughput(jobs,delta,beta)
+throughput,_ = get_best_throughput(jobs,delta,beta)
 
-throughput_scheduler(jobs,delta,beta,job_classes)     
+lb1 = len(jobs) / throughput
+lb2,lb3 = get_lower_bound(jobs,delta,beta)
+
+schedule, completed, time = throughput_scheduler(jobs,delta,beta,job_classes)     
+
+print("Throughput-based lower bound: {}".format(lb1))
+print("Work-based lower bound: {}".format(lb3))
+print("Bottleneck-based lower bound: {}".format(lb2))
+print("Flow-Scheduler time: {}".format(time))

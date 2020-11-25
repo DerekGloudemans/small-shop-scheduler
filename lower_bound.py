@@ -19,11 +19,17 @@ def get_lower_bound(jobs,delta,beta):
     
     max_eff = np.mean( np.max(jobs,axis = 2), axis = 0) # average max across all jobs
     
+    
     n_jobs = jobs.shape[0]
     n_workers = jobs.shape[2]
     
     total_weighted_work_time = sum(n_jobs/max_eff) /n_workers
-
+    temp1 = 1.0/ np.max(jobs,axis = 2)
+    temp2 = np.sum(temp1,axis = 0)
+    temp3 = temp2/beta
+    temp4 = np.sum(temp3)
+    temp5 = temp4/n_workers
+    total_required_work_time = temp5
 
     # calculate lower bound by identifying bottleneck operation (least throughput)    
     
@@ -44,7 +50,7 @@ def get_lower_bound(jobs,delta,beta):
     total_time[idx] = jobs.shape[0] / throughput[idx]
     total_bottleneck_time = sum(total_time)
     
-    return total_bottleneck_time, total_weighted_work_time
+    return total_bottleneck_time, total_required_work_time
         
 ###############################################################################
 ###############################################################################
@@ -58,7 +64,7 @@ def get_lower_bound(jobs,delta,beta):
 
 # Specify jobs [jobs,tasks,workers]
 m = 50 # num jobs
-n = 10 # num tasks per job
+n = 5 # num tasks per job
 p = 10 # num workers
 jobs = np.random.rand(m,n,p)
 # parallelization limits
