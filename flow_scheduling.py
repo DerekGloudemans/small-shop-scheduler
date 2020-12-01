@@ -1,13 +1,15 @@
 """
 Computes small shop optimal schedule by brute force
 """
-
+import time
 import numpy as np
 import queue
 import copy
 from itertools import combinations 
 from mip import *
 from lower_bound import get_lower_bound
+from greedy_scheduling import greedy_scheduler
+from plot_results import plot_schedule
 
 def get_best_throughput(jobs,delta,beta):
     """
@@ -168,8 +170,8 @@ def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50,FLEXIBLE
                     # available is 1 for jobs that are free and pertinent to worker
                     available = np.ones(completed.shape)
                     available[:,1:] = np.floor(completed[:,:-1]) # precedence constraint met if 1
-                    available = np.multiply(1-np.ceil(completed),available) 
-                    available = np.multiply(available,active[:,:,k])
+                    available_all = np.multiply(1-np.ceil(completed),available) 
+                    available = np.multiply(available_all,active[:,:,k])
                     
                     # only consider tasks that are below parallelization limit
                     task_ip = np.zeros(n)
@@ -204,29 +206,7 @@ def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50,FLEXIBLE
                                 
                             if j in some_ready_tasks and last_batch:
                                 task = j
-                                break
-#                    elif FLEXIBLE:
-#                        # this time, consider non-alloted tasks
-#                        available = np.ones(completed.shape)
-#                        available[:,1:] = np.floor(completed[:,:-1])
-#                        available = np.multiply(1-np.ceil(completed),available) 
-#                        
-#                        # only consider tasks that are below parallelization limit
-#                        task_ip = np.zeros(n)
-#                        for item in in_progress:
-#                            j = item[2]
-#                            task_ip[j] += 1
-#                        task_station_avail = (task_ip < delta).astype(int)
-#                        
-#                        avail_tasks = np.multiply(np.sum(available,axis = 0),task_station_avail)
-#                        ready_tasks = np.where(avail_tasks >= beta)
-#                        if len(ready_tasks[0]) > 0:
-#                            importance = 1- (w_stage_alloc[:,k] / allocation[:,k])
-#                            for j in range(n):
-#                                if j not in ready_tasks:
-#                                    importance[j] = -10
-#                            task = np.argmax(importance)
-                        
+                                break                        
                         
                     # find first beta[task] jobs in job_order with available[job,task] = 1
                     if task is not None:
@@ -306,44 +286,66 @@ def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50,FLEXIBLE
 
 
 #################################################################################################
+if __name__ == "__main__":
+    # Specify jobs [jobs,tasks,workers]
+    worker_disparity = 0.5
+    beta_max = 10
+    delta_max = 5
+    m = 1000 # num jobs
+    n = 100 # num tasks per job
+    p = 10 # num workers
+    c = 50 # number of job classes
+    start = time.time()
     
-# Specify jobs [jobs,tasks,workers]
-m = 1000 # num jobs
-n = 5 # num tasks per job
-p = 10 # num workers
+    rands = np.random.rand(c)
+    rands = rands/ sum(rands)
+    class_frequencies = np.round(rands*m).astype(int)
+    all_jobs = []
+    job_classes = []
+    for i in range(len(class_frequencies)):
+        jobs = np.random.rand(class_frequencies[i],n,p)*worker_disparity  + (1-worker_disparity)
+        all_jobs.append(jobs)
+        for count in range(class_frequencies[i]):
+            job_classes.append(i)    
+    jobs = np.concatenate(all_jobs, axis = 0)
+    
+    # parallelization limits
+    beta = np.random.randint(1,beta_max,size = n)
+    # batching limits
+    delta = np.random.randint(1,delta_max,size = n)
+    
+    # constrain that all batchable tasks have same time
+    for t in range(len(beta)):
+        if beta[t] > 1: # task is batchable
+            for w in range(p):
+                jobs[:,t,w] = np.random.rand()*worker_disparity  + (1-worker_disparity)
+    
+    throughput,_ = get_best_throughput(jobs,delta,beta)
+    
+    lb1 = len(jobs) / throughput
+    lb2,lb3 = get_lower_bound(jobs,delta,beta)
+    
+    schedule, completed, end_time = throughput_scheduler(jobs,delta,beta,job_classes)  
+    schedule2,completed2,end_time2  = greedy_scheduler(jobs,delta,beta,job_classes)
+    
+    best_to_worst = np.max(np.max(jobs,axis = 2) / np.min(jobs,axis = 2))
+    
+    print("Throughput-based lower bound: {}".format(lb1))
+    print("Work-based lower bound: {}".format(lb3))
+    print("Bottleneck-based lower bound: {}".format(lb2))
+    print("Flow-Scheduler time: {}".format(end_time))
+    print("Greedy Scheduler time: {}".format(end_time2))
+    print("Best worker is {} times better than worst worker for a task".format(best_to_worst))
 
-c = 10 # number of job classes
-rands = np.random.rand(c)
-rands = rands/ sum(rands)
-class_frequencies = np.round(rands*m).astype(int)
-all_jobs = []
-job_classes = []
-for i in range(len(class_frequencies)):
-    jobs = np.random.rand(class_frequencies[i],n,p)/1.25 + 0.2
-    all_jobs.append(jobs)
-    for count in range(class_frequencies[i]):
-        job_classes.append(i)    
-jobs = np.concatenate(all_jobs, axis = 0)
-
-# parallelization limits
-beta = np.random.randint(1,10,size = n)
-# batching limits
-delta = np.random.randint(1,10,size = n)
-
-# constrain that all batchable tasks have same time
-for t in range(len(beta)):
-    if beta[t] > 1: # task is batchable
-        for w in range(p):
-            jobs[:,t,w] = np.random.rand()
-
-throughput,_ = get_best_throughput(jobs,delta,beta)
-
-lb1 = len(jobs) / throughput
-lb2,lb3 = get_lower_bound(jobs,delta,beta)
-
-schedule, completed, time = throughput_scheduler(jobs,delta,beta,job_classes)     
-
-print("Throughput-based lower bound: {}".format(lb1))
-print("Work-based lower bound: {}".format(lb3))
-print("Bottleneck-based lower bound: {}".format(lb2))
-print("Flow-Scheduler time: {}".format(time))
+    colors = np.random.rand(n,3)
+    colors[:,2] = 0.5
+    #colors[:,1] = 0.3
+    #colors[:,0] = np.arange(0,1,0.0667)
+    
+    elapsed = time.time() - start
+    print("Took {} seconds".format(elapsed))
+    
+    lb = max(lb1,lb2,lb3)
+    xmax = max(end_time,end_time2)
+    plot_schedule(schedule ,lb =lb, xmax = xmax,colors = colors)
+    plot_schedule(schedule2,lb =lb, xmax = xmax,colors = colors)
