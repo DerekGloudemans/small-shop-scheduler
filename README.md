@@ -12,7 +12,7 @@ The small shop task is defined as follows:
 
 Two schedulers are implemented:
 - Greedy Scheduler - tries to keep all workers busy on the available task for which they are best suited at all times
-![Greedy1](:ims/greedy 15 tasks.png")
+![Greedy1]("ims/greedy 15 tasks.png")
 - Flow-based scheduler - allocates workers to tasks such that no single task is a bottleneck (i.e. maximize throughput), and assigns tasks according to this allotment.
 
 Two lower bounds are computed:
