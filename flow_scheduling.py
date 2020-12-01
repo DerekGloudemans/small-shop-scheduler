@@ -288,13 +288,13 @@ def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50,FLEXIBLE
 #################################################################################################
 if __name__ == "__main__":
     # Specify jobs [jobs,tasks,workers]
-    worker_disparity = 0.5
+    worker_disparity = 1
     beta_max = 10
     delta_max = 5
-    m = 1000 # num jobs
-    n = 100 # num tasks per job
-    p = 10 # num workers
-    c = 50 # number of job classes
+    m = 100 # num jobs
+    n = 10 # num tasks per job
+    p = 10  # num workers
+    c = 2 # number of job classes
     start = time.time()
     
     rands = np.random.rand(c)
@@ -323,7 +323,7 @@ if __name__ == "__main__":
     throughput,_ = get_best_throughput(jobs,delta,beta)
     
     lb1 = len(jobs) / throughput
-    lb2,lb3 = get_lower_bound(jobs,delta,beta)
+    lb2= get_lower_bound(jobs,delta,beta)
     
     schedule, completed, end_time = throughput_scheduler(jobs,delta,beta,job_classes)  
     schedule2,completed2,end_time2  = greedy_scheduler(jobs,delta,beta,job_classes)
@@ -332,20 +332,20 @@ if __name__ == "__main__":
     
     print("Throughput-based lower bound: {}".format(lb1))
     print("Work-based lower bound: {}".format(lb3))
-    print("Bottleneck-based lower bound: {}".format(lb2))
+    #print("Bottleneck-based lower bound: {}".format(lb2))
     print("Flow-Scheduler time: {}".format(end_time))
     print("Greedy Scheduler time: {}".format(end_time2))
     print("Best worker is {} times better than worst worker for a task".format(best_to_worst))
 
     colors = np.random.rand(n,3)
     colors[:,2] = 0.5
-    #colors[:,1] = 0.3
-    #colors[:,0] = np.arange(0,1,0.0667)
+#    colors[:,1] = 0.3
+#    colors[:,0] = np.arange(0,1,0.2)
     
     elapsed = time.time() - start
     print("Took {} seconds".format(elapsed))
     
-    lb = max(lb1,lb2,lb3)
+    lb = max(lb1,lb2)
     xmax = max(end_time,end_time2)
     plot_schedule(schedule ,lb =lb, xmax = xmax,colors = colors)
     plot_schedule(schedule2,lb =lb, xmax = xmax,colors = colors)

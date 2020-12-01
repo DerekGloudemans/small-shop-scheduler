@@ -31,26 +31,26 @@ def get_lower_bound(jobs,delta,beta):
     temp5 = temp4/n_workers
     total_required_work_time = temp5
 
-    # calculate lower bound by identifying bottleneck operation (least throughput)    
+#    # calculate lower bound by identifying bottleneck operation (least throughput)    
+#    
+#    # find best throughput for each task
+#    throughput = np.zeros(len(delta))
+#    avg_jobs = np.mean(jobs,axis = 0)
+#    for j in range (len(delta)):
+#        # find best delta workers at task
+#        sorted_workers = np.sort(avg_jobs[j,:])
+#        throughput[j] = sum(sorted_workers[-delta[j]:]) * beta[j]
+#     
+#    # for each other task, add in the maximum amount of time one job can take
+#    worst_job_per_task = np.max((np.min(jobs,axis= 2)),axis = 0)
+#    
+#    idx = np.argmin(throughput)
+#    
+#    total_time = worst_job_per_task
+#    total_time[idx] = jobs.shape[0] / throughput[idx]
+#    total_bottleneck_time = sum(total_time)
     
-    # find best throughput for each task
-    throughput = np.zeros(len(delta))
-    avg_jobs = np.mean(jobs,axis = 0)
-    for j in range (len(delta)):
-        # find best delta workers at task
-        sorted_workers = np.sort(avg_jobs[j,:])
-        throughput[j] = sum(sorted_workers[-delta[j]:]) * beta[j]
-     
-    # for each other task, add in the maximum amount of time one job can take
-    worst_job_per_task = np.max((np.min(jobs,axis= 2)),axis = 0)
-    
-    idx = np.argmin(throughput)
-    
-    total_time = worst_job_per_task
-    total_time[idx] = jobs.shape[0] / throughput[idx]
-    total_bottleneck_time = sum(total_time)
-    
-    return total_bottleneck_time, total_required_work_time
+    return total_required_work_time
         
 ###############################################################################
 ###############################################################################
@@ -78,4 +78,4 @@ for t in range(len(beta)):
         for w in range(p):
             jobs[:,t,w] = np.random.rand()
 
-lb1,lb2 = get_lower_bound(jobs,delta,beta)
+lb1 = get_lower_bound(jobs,delta,beta)
