@@ -1,5 +1,7 @@
 # small-shop-scheduler
 This repo is still in progress but figured I may as well post what I've got so far.
+![](ims/Unlocked_simulator.png)
+
 
 The small shop task is defined as follows:
 
