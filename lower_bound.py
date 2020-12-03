@@ -31,7 +31,11 @@ def get_lower_bound(jobs,delta,beta):
     temp5 = temp4/n_workers
     total_required_work_time = temp5
 
-#    # calculate lower bound by identifying bottleneck operation (least throughput)    
+#    # calculate lower bound by identifying the job that takes the longest to go through
+    fastest_job_tasks = np.max(jobs,axis = 2)
+    times = 1/fastest_job_tasks
+    sum_times = np.sum(times,axis = 1)
+    worst_job_time = np.max(sum_times)     
 #    
 #    # find best throughput for each task
 #    throughput = np.zeros(len(delta))
@@ -50,7 +54,7 @@ def get_lower_bound(jobs,delta,beta):
 #    total_time[idx] = jobs.shape[0] / throughput[idx]
 #    total_bottleneck_time = sum(total_time)
     
-    return total_required_work_time
+    return total_required_work_time,worst_job_time
         
 ###############################################################################
 ###############################################################################

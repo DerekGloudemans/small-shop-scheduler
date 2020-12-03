@@ -31,15 +31,12 @@ time = 1
 lb1 = 1
 lb2 = 1
 lb3 = 1
-
 for m in [10,50,100,500,1000,2000,5000]:
     iteration = 0
-    while iteration < 20:
+    while iteration < 10:
         if iteration % 1 == 0:
-            print("On iteration {}. Last competitive ratio: {}".format(iteration,time/max(lb1,lb2,lb3)))
-        if iteration % 100 == 0:
-            with open("fixed_results.cpkl","wb") as f:
-                pickle.dump(all_results,f)
+            print("On {} iteration {}. Last competitive ratio: {}".format(m,iteration,time/max(lb1,lb2,lb3)))
+            
              
         #m = np.random.randint(10,4000)
         n = 10 #np.random.randint(2,20)
@@ -75,7 +72,7 @@ for m in [10,50,100,500,1000,2000,5000]:
         # get lower bounds
         throughput,_ = get_best_throughput(jobs,delta,beta)
         lb1 = len(jobs) / throughput
-        lb2 = get_lower_bound(jobs,delta,beta)
+        lb2,lb3 = get_lower_bound(jobs,delta,beta)
         
         
         # compute schedule
@@ -96,7 +93,7 @@ for m in [10,50,100,500,1000,2000,5000]:
     #                        print("Greedy Scheduler time: {}".format(time2))
     #                        print("Best worker is {} times better than worst worker for a task".format(best_to_worst))
         
-        result = {"lb": max(lb1,lb2),
+        result = {"lb": max(lb1,lb2,lb3),
                   "flow":time,
                   "greedy":time2,
                   "ratio":best_to_worst,
@@ -113,6 +110,9 @@ for m in [10,50,100,500,1000,2000,5000]:
         
         all_results.append(result)
         iteration += 1
+        
+    with open("fixed_results.cpkl","wb") as f:
+        pickle.dump(all_results,f)
         
 
                         

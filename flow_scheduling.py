@@ -86,7 +86,7 @@ def get_best_throughput(jobs,delta,beta):
         return min_throughput, all_results[key][0]
     
     
-def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50,FLEXIBLE = False):
+def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50,FLEXIBLE = False,TASK_SELECTION = "lowest"):
     """
     Schedules tasks for the small-shop scheduling problem
      
@@ -96,6 +96,8 @@ def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50,FLEXIBLE
     beta -[n] array - batching limits for each task
     job_classes - [m] array - specifies job type, all jobs with same integer job id 
         have identical processing times
+    TASK_SELECTION - if "lowest" picks task with least amount of time spent this stage
+        if "first", picks first task below allocation for this stage
     """
     
     (m,n,p) = jobs.shape
@@ -194,7 +196,14 @@ def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50,FLEXIBLE
                         for j in range(n):
                             if j not in ready_tasks:
                                 importance[j] = -np.inf
-                        task = np.argmax(importance)
+                        
+                        if TASK_SELECTION == "lowest":
+                            task = np.argmax(importance)
+                        elif TASK_SELECTION == "first":
+                            try:
+                                task = np.where(importance > 0)[0][0]
+                            except IndexError:
+                                task = np.argmax(importance)
                       
                     elif len(some_ready_tasks) > 0:  
                         for j in range(n):
@@ -288,11 +297,11 @@ def throughput_scheduler(jobs,delta,beta,job_classes,stage_minimum = 50,FLEXIBLE
 #################################################################################################
 if __name__ == "__main__":
     # Specify jobs [jobs,tasks,workers]
-    worker_disparity = 1
+    worker_disparity = 0.5
     beta_max = 10
     delta_max = 5
-    m = 100 # num jobs
-    n = 10 # num tasks per job
+    m = 500 # num jobs
+    n = 15 # num tasks per job
     p = 10  # num workers
     c = 2 # number of job classes
     start = time.time()
@@ -323,16 +332,17 @@ if __name__ == "__main__":
     throughput,_ = get_best_throughput(jobs,delta,beta)
     
     lb1 = len(jobs) / throughput
-    lb2= get_lower_bound(jobs,delta,beta)
+    lb2,lb3= get_lower_bound(jobs,delta,beta)
     
-    schedule, completed, end_time = throughput_scheduler(jobs,delta,beta,job_classes)  
+    schedule, completed, end_time = throughput_scheduler(jobs,delta,beta,job_classes,TASK_SELECTION = "first") 
+    schedule3, completed3, end_time3 = throughput_scheduler(jobs,delta,beta,job_classes,TASK_SELECTION = "lowest")
     schedule2,completed2,end_time2  = greedy_scheduler(jobs,delta,beta,job_classes)
     
     best_to_worst = np.max(np.max(jobs,axis = 2) / np.min(jobs,axis = 2))
     
     print("Throughput-based lower bound: {}".format(lb1))
-    print("Work-based lower bound: {}".format(lb3))
-    #print("Bottleneck-based lower bound: {}".format(lb2))
+    print("Work-based lower bound: {}".format(lb2))
+    print("Worst job-based lower bound: {}".format(lb3))
     print("Flow-Scheduler time: {}".format(end_time))
     print("Greedy Scheduler time: {}".format(end_time2))
     print("Best worker is {} times better than worst worker for a task".format(best_to_worst))
@@ -345,7 +355,8 @@ if __name__ == "__main__":
     elapsed = time.time() - start
     print("Took {} seconds".format(elapsed))
     
-    lb = max(lb1,lb2)
+    lb = max(lb1,lb2,lb3)
     xmax = max(end_time,end_time2)
     plot_schedule(schedule ,lb =lb, xmax = xmax,colors = colors)
+    plot_schedule(schedule3 ,lb =lb, xmax = xmax,colors = colors)
     plot_schedule(schedule2,lb =lb, xmax = xmax,colors = colors)

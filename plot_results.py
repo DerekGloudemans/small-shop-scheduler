@@ -86,15 +86,34 @@ if __name__ == "__main__":
     cr_greedy = sum(greedy_ratios)/len(greedy_ratios)
     
     # plot competitive ratio versus number of jobs
-    plt.figure()
+    plt.figure(figsize = (10,10))
     plt.scatter(jobs,flow_ratios)
     #plt.scatter(jobs,greedy_ratios)
-    m,b = np.polyfit(np.array(jobs),np.array(flow_ratios),1)
-    plt.plot([0,max(jobs)],[b,b+m*max(jobs)],color = (1,0,0))
+#    m,b = np.polyfit(np.array(jobs),np.array(flow_ratios),1)
+#    plt.plot([0,max(jobs)],[b,b+m*max(jobs)],color = (1,0,0))
     plt.xlim([0,max(jobs)])
     plt.ylim([0.9,5])
-    plt.xlabel("Number of Jobs",fontsize = 16)
-    plt.ylabel("Competitive Ratio",fontsize = 16)
+    plt.xlabel("Number of Jobs",fontsize = 32)
+    plt.ylabel("Competitive Ratio",fontsize = 32)
+    
+    maxes = {}
+    for i in range(len(jobs)):
+        job = jobs[i]
+        if job not in maxes.keys():
+            maxes[job] = flow_ratios[i]
+            
+        elif flow_ratios[i] > maxes[job]:
+            maxes[job] = flow_ratios[i]
+    
+    ub_jobs = []
+    ub_crs  = []
+    for i in range(10000):
+        if i in maxes.keys():
+            ub_jobs.append(i)
+            ub_crs.append(maxes[i])
+    plt.plot(ub_jobs,ub_crs, color = (1,0,0))
+    plt.legend(["Worst Trials","Individual Trials"],fontsize = 28)        
+    plt.grid(True)
     
     plt.figure()
     plt.scatter(job_classes,flow_ratios)
